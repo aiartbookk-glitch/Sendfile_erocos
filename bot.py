@@ -2,6 +2,8 @@ import telebot
 import requests
 import io
 import time
+import base64
+import uuid
 
 BOT_TOKEN = "8495788801:AAH52uGWsD-OUoTDdZlV6oy8NnyduVOmyos"
 API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0Z19pZCI6NTMxMDU1NTUzNSwiZGJfbm0iOiJzdWJfZGF0YTIyIn0.lTMm5yAcPg0dgc3GPt-ECFxxL8iH0x1FDTYxreVr8pQ"   # <-- dán lại key cho chắc
@@ -42,81 +44,34 @@ def handle_photo(message):
     try:
         bot.send_message(message.chat.id, "⏳ Đang xử lý...")
 
-        # tải ảnh từ Telegram
+        # tải ảnh
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded = bot.download_file(file_info.file_path)
 
-        image_file = io.BytesIO(downloaded)
-        image_file.name = "image.jpg"
+        # convert base64
+        encoded_photo = base64.b64encode(downloaded).decode("utf-8")
 
-        # ====== TẠO JOB ======
-        create = requests.post(
+        payload = {
+            "id_gen": str(uuid.uuid4()),   # random id
+            "photo": encoded_photo,
+            "webhook": "https://webhook.site/your-test-url"  # tạm test
+        }
+
+        response = requests.post(
             f"{BASE_URL}/photos/undress",
-            headers={"X-API-KEY": API_KEY},
-            files={"file": image_file},
+            headers={
+                "X-API-KEY": API_KEY,
+                "Content-Type": "application/json"
+            },
+            json=payload,
             timeout=120
         )
 
-        print("CREATE STATUS:", create.status_code)
-        print("CREATE RESPONSE:", create.text)
-
-        if create.status_code != 200:
-            bot.send_message(message.chat.id, f"❌ API lỗi: {create.status_code}")
-            bot.send_message(message.chat.id, create.text)
-            return
-
-        data = create.json()
-        job_id = data.get("id")
-
-        if not job_id:
-            bot.send_message(message.chat.id, "❌ Không nhận được job_id")
-            bot.send_message(message.chat.id, str(data))
-            return
-
-        # ====== CHECK TRẠNG THÁI ======
-        for _ in range(30):
-            check = requests.get(
-                f"{BASE_URL}/photos/{job_id}",
-                headers={"X-API-KEY": API_KEY},
-                timeout=60
-            )
-
-            print("CHECK STATUS:", check.status_code)
-            print("CHECK RESPONSE:", check.text)
-
-            if check.status_code != 200:
-                bot.send_message(message.chat.id, "❌ Lỗi khi kiểm tra trạng thái.")
-                bot.send_message(message.chat.id, check.text)
-                return
-
-            result = check.json()
-            status = result.get("status")
-
-            if status == "completed":
-                image_url = result.get("result") or result.get("image") or result.get("url")
-
-                if not image_url:
-                    bot.send_message(message.chat.id, "❌ Không tìm thấy link ảnh.")
-                    bot.send_message(message.chat.id, str(result))
-                    return
-
-                img_data = requests.get(image_url).content
-                result_image = io.BytesIO(img_data)
-                result_image.name = "result.jpg"
-
-                bot.send_photo(message.chat.id, result_image)
-                return
-
-            if status == "failed":
-                bot.send_message(message.chat.id, "❌ Xử lý thất bại.")
-                return
-
-            time.sleep(2)
-
-        bot.send_message(message.chat.id, "⌛ Hết thời gian chờ.")
+        bot.send_message(message.chat.id, f"STATUS: {response.status_code}")
+        bot.send_message(message.chat.id, response.text)
 
     except Exception as e:
-        bot.send_message(message.chat.id, f"⚠️ Lỗi: {str(e)}")
+        bot.send_message(message.chat.id, f"Lỗi: {str(e)}")
 
 
 print("🚀 Bot đang chạy...")
