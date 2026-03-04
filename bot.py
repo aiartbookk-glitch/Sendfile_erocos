@@ -1,78 +1,83 @@
 import telebot
 import requests
-import io
-import time
 import base64
 import uuid
+from flask import Flask, request
+import os
 
-BOT_TOKEN = "8495788801:AAH52uGWsD-OUoTDdZlV6oy8NnyduVOmyos"
-API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0Z19pZCI6NTMxMDU1NTUzNSwiZGJfbm0iOiJzdWJfZGF0YTIyIn0.lTMm5yAcPg0dgc3GPt-ECFxxL8iH0x1FDTYxreVr8pQ"   # <-- dán lại key cho chắc
+BOT_TOKEN = os.getenv("8495788801:AAH52uGWsD-OUoTDdZlV6oy8NnyduVOmyos")
+API_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0Z19pZCI6NTMxMDU1NTUzNSwiZGJfbm0iOiJzdWJfZGF0YTIyIn0.lTMm5yAcPg0dgc3GPt-ECFxxL8iH0x1FDTYxreVr8pQ")
 
 BASE_URL = "https://public-api.undresstool.fun/api/v1"
 
 bot = telebot.TeleBot(BOT_TOKEN)
+app = Flask(__name__)
+
+# ================= TELEGRAM WEBHOOK =================
+
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
+def telegram_webhook():
+    json_str = request.get_data().decode("UTF-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "OK", 200
 
 
-# ================= TEST KEY KHI BOT CHẠY =================
-def test_api_key():
-    try:
-        r = requests.get(
-            f"{BASE_URL}/me",
-            headers={"X-API-KEY": API_KEY},
-            timeout=30
-        )
-        print("===== TEST AUTH =====")
-        print("Status:", r.status_code)
-        print("Response:", r.text)
-        print("=====================")
-    except Exception as e:
-        print("Auth test error:", e)
+# ================= CALLBACK TỪ API =================
 
+@app.route("/api/callback", methods=["POST"])
+def api_callback():
+    data = request.json
+    print("CALLBACK:", data)
 
-test_api_key()
+    # bạn phải lưu mapping id_gen -> chat_id ở database
+    # ví dụ demo gửi test về admin:
 
+    admin_chat_id = 5310555535
 
-# ================= START =================
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.reply_to(message, "📸 Gửi ảnh để xử lý.")
+    image_url = data.get("result")
+
+    if image_url:
+        img_data = requests.get(image_url).content
+        bot.send_photo(admin_chat_id, img_data)
+
+    return "OK", 200
 
 
 # ================= HANDLE PHOTO =================
+
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
-    try:
-        bot.send_message(message.chat.id, "⏳ Đang xử lý...")
+    bot.send_message(message.chat.id, "⏳ Đang xử lý...")
 
-        # tải ảnh
-        file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded = bot.download_file(file_info.file_path)
+    file_info = bot.get_file(message.photo[-1].file_id)
+    downloaded = bot.download_file(file_info.file_path)
 
-        # convert base64
-        encoded_photo = base64.b64encode(downloaded).decode("utf-8")
+    encoded = base64.b64encode(downloaded).decode("utf-8")
 
-        payload = {
-            "id_gen": str(uuid.uuid4()),   # random id
-            "photo": encoded_photo,
-            "webhook": "https://webhook.site/your-test-url"  # tạm test
-        }
+    id_gen = str(uuid.uuid4())
 
-        response = requests.post(
-            f"{BASE_URL}/photos/undress",
-            headers={
-                "X-API-KEY": API_KEY,
-                "Content-Type": "application/json"
-            },
-            json=payload,
-            timeout=120
-        )
+    payload = {
+        "id_gen": id_gen,
+        "photo": encoded,
+        "webhook": "https://your-railway-url.up.railway.app/api/callback"
+    }
 
-        bot.send_message(message.chat.id, f"STATUS: {response.status_code}")
-        bot.send_message(message.chat.id, response.text)
+    response = requests.post(
+        f"{BASE_URL}/photos/undress",
+        headers={
+            "X-API-KEY": API_KEY,
+            "Content-Type": "application/json"
+        },
+        json=payload
+    )
 
-    except Exception as e:
-        bot.send_message(message.chat.id, f"Lỗi: {str(e)}")
+    print("CREATE:", response.status_code, response.text)
 
 
-print("🚀 Bot đang chạy...")
-bot.infinity_polling()
+# ================= START SERVER =================
+
+if __name__ == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://your-railway-url.up.railway.app/{BOT_TOKEN}")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
