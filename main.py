@@ -7,7 +7,7 @@ app = FastAPI()
 
 BOT_TOKEN = "8751204704:AAHVLFWRt1hQvz3HxnwDNt7IRhA4eZYEfjg"
 API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0Z19pZCI6NTMxMDU1NTUzNSwiZGJfbm0iOiJzdWJfZGF0YTgzIn0.icegufzG28O8T99fy_dawALjVlDSTbo62RCTnIRUk1k"
-WEBHOOK_URL = "https://librariannudebot-production.up.railway.app/"
+WEBHOOK_URL = "https://librariannudebot-production.up.railway.app"
 
 bot = Bot(token=BOT_TOKEN)
 
