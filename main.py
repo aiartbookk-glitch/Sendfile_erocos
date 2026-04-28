@@ -57,15 +57,14 @@ async def telegram_webhook(request: Request):
 
     id_gen = str(uuid.uuid4())
 
-    # ===== GỬI API =====
+    # ===== GỬI API (FIX ĐÚNG FORM-DATA) =====
     try:
         res = requests.post(
             "https://public-api.undresstool.fun/api/v1/photos/undress",
             headers={
-                "X-API-KEY": API_KEY,
-                "Content-Type": "application/json"
+                "X-API-KEY": API_KEY
             },
-            json={
+            data={  # ⚠️ QUAN TRỌNG: dùng data=, không phải json=
                 "id_gen": id_gen,
                 "photo": img_b64,
                 "webhook": f"{WEBHOOK_URL}/undress-photo-webhook"
@@ -80,6 +79,10 @@ async def telegram_webhook(request: Request):
     except Exception as e:
         print("API ERROR:", e)
         await bot.send_message(chat_id, "Lỗi API")
+        return {"ok": True}
+
+    if res.status_code != 200:
+        await bot.send_message(chat_id, "API lỗi")
         return {"ok": True}
 
     # lưu mapping
@@ -101,7 +104,7 @@ async def result_webhook(
     chat_id = JOB_MAP.get(id_gen)
 
     if not chat_id:
-        print("Không tìm thấy chat_id (có thể restart)")
+        print("Không tìm thấy chat_id (có thể Railway restart)")
         return {"error": "no chat_id"}
 
     path = f"/tmp/result_{id_gen}.png"
