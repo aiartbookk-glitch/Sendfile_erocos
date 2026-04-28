@@ -127,7 +127,7 @@ app.get("/complete", (req, res) => {
 
   task.status = "verified";
 
-  res.redirect(`https://t.me/YOUR_BOT_USERNAME?start=${token}`);
+  res.redirect(`https://t.me/librarian1_nude_bot?start=${token}`);
 });
 
 app.get("/", (req, res) => {
