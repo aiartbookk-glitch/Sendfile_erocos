@@ -34,7 +34,7 @@ const tasks = {};
 function createToken(userId) {
   return crypto
     .createHash("sha256")
-    .update(userId + Date.now() + Math.random())
+    .update(String(userId) + String(Date.now()) + String(Math.random()))
     .digest("hex");
 }
 
