@@ -1,3 +1,5 @@
+import base64
+import uuid
 import requests
 from fastapi import FastAPI, Request, UploadFile, File, Form
 from telegram import Update, Bot
@@ -11,7 +13,7 @@ WEBHOOK_URL = "https://librariannudebot-production.up.railway.app"
 
 bot = Bot(token=BOT_TOKEN)
 
-# lưu job_id -> chat_id
+# lưu id_gen -> chat_id
 JOB_MAP = {}
 
 # ===== TELEGRAM WEBHOOK =====
@@ -49,19 +51,26 @@ async def telegram_webhook(request: Request):
     path = f"/tmp/{file_id}.jpg"
     await file.download_to_drive(path)
 
-    # ===== GỬI API (FIX CHUẨN) =====
+    # ===== CHUYỂN BASE64 =====
+    with open(path, "rb") as f:
+        img_b64 = base64.b64encode(f.read()).decode()
+
+    id_gen = str(uuid.uuid4())
+
+    # ===== GỬI API =====
     try:
-        with open(path, "rb") as f:
-            res = requests.post(
-                "https://public-api.undresstool.fun/api/v1/photos/undress",
-                headers={
-                    "X-API-KEY": API_KEY
-                },
-                files={"file": f},
-                data={
-                    "webhook_url": f"{WEBHOOK_URL}/undress-photo-webhook"
-                }
-            )
+        res = requests.post(
+            "https://public-api.undresstool.fun/api/v1/photos/undress",
+            headers={
+                "X-API-KEY": API_KEY,
+                "Content-Type": "application/json"
+            },
+            json={
+                "id_gen": id_gen,
+                "photo": img_b64,
+                "webhook": f"{WEBHOOK_URL}/undress-photo-webhook"
+            }
+        )
 
         print("STATUS:", res.status_code)
         print("API RESPONSE:", res.text)
@@ -73,19 +82,14 @@ async def telegram_webhook(request: Request):
         await bot.send_message(chat_id, "Lỗi API")
         return {"ok": True}
 
-    job_id = data_api.get("id") or data_api.get("job_id")
-
-    if not job_id:
-        await bot.send_message(chat_id, "API không trả job_id")
-        return {"ok": True}
-
-    JOB_MAP[job_id] = chat_id
+    # lưu mapping
+    JOB_MAP[id_gen] = chat_id
     print("JOB_MAP:", JOB_MAP)
 
     return {"ok": True}
 
 
-# ===== NHẬN KẾT QUẢ =====
+# ===== NHẬN KẾT QUẢ TỪ API =====
 @app.post("/undress-photo-webhook")
 async def result_webhook(
     status: str = Form(...),
@@ -97,7 +101,7 @@ async def result_webhook(
     chat_id = JOB_MAP.get(id_gen)
 
     if not chat_id:
-        print("Không tìm thấy chat_id (có thể Railway restart)")
+        print("Không tìm thấy chat_id (có thể restart)")
         return {"error": "no chat_id"}
 
     path = f"/tmp/result_{id_gen}.png"
