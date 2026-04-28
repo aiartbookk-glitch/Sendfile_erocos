@@ -1,4 +1,4 @@
-import base64
+import os
 import uuid
 import requests
 from fastapi import FastAPI, Request, UploadFile, File, Form
@@ -13,7 +13,7 @@ WEBHOOK_URL = "https://librariannudebot-production.up.railway.app"
 
 bot = Bot(token=BOT_TOKEN)
 
-# lưu id_gen -> chat_id
+# map id_gen -> chat_id
 JOB_MAP = {}
 
 # ===== TELEGRAM WEBHOOK =====
@@ -51,30 +51,27 @@ async def telegram_webhook(request: Request):
     path = f"/tmp/{file_id}.jpg"
     await file.download_to_drive(path)
 
-    # ===== CHUYỂN BASE64 =====
-    with open(path, "rb") as f:
-        img_b64 = base64.b64encode(f.read()).decode()
-
+    # ===== GỬI API (CHUẨN FILE UPLOAD) =====
     id_gen = str(uuid.uuid4())
 
-    # ===== GỬI API (FIX ĐÚNG FORM-DATA) =====
     try:
-        res = requests.post(
-            "https://public-api.undresstool.fun/api/v1/photos/undress",
-            headers={
-                "X-API-KEY": API_KEY
-            },
-            data={  # ⚠️ QUAN TRỌNG: dùng data=, không phải json=
-                "id_gen": id_gen,
-                "photo": img_b64,
-                "webhook": f"{WEBHOOK_URL}/undress-photo-webhook"
-            }
-        )
+        with open(path, "rb") as f:
+            res = requests.post(
+                "https://public-api.undresstool.fun/api/v1/photos/undress",
+                headers={
+                    "X-API-KEY": API_KEY
+                },
+                files={  # ✅ QUAN TRỌNG: gửi file thật
+                    "photo": f
+                },
+                data={
+                    "id_gen": id_gen,
+                    "webhook": f"{WEBHOOK_URL}/undress-photo-webhook"
+                }
+            )
 
         print("STATUS:", res.status_code)
         print("API RESPONSE:", res.text)
-
-        data_api = res.json()
 
     except Exception as e:
         print("API ERROR:", e)
@@ -82,7 +79,7 @@ async def telegram_webhook(request: Request):
         return {"ok": True}
 
     if res.status_code != 200:
-        await bot.send_message(chat_id, "API lỗi")
+        await bot.send_message(chat_id, f"API lỗi:\n{res.text}")
         return {"ok": True}
 
     # lưu mapping
@@ -92,7 +89,7 @@ async def telegram_webhook(request: Request):
     return {"ok": True}
 
 
-# ===== NHẬN KẾT QUẢ TỪ API =====
+# ===== NHẬN KẾT QUẢ =====
 @app.post("/undress-photo-webhook")
 async def result_webhook(
     status: str = Form(...),
@@ -104,7 +101,7 @@ async def result_webhook(
     chat_id = JOB_MAP.get(id_gen)
 
     if not chat_id:
-        print("Không tìm thấy chat_id (có thể Railway restart)")
+        print("❌ Không tìm thấy chat_id (Railway restart?)")
         return {"error": "no chat_id"}
 
     path = f"/tmp/result_{id_gen}.png"
