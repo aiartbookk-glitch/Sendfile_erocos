@@ -1,4 +1,3 @@
-import os
 import requests
 from fastapi import FastAPI, Request, UploadFile, File, Form
 from telegram import Update, Bot
@@ -12,6 +11,7 @@ WEBHOOK_URL = "https://librariannudebot-production.up.railway.app"
 
 bot = Bot(token=BOT_TOKEN)
 
+# lưu job_id -> chat_id
 JOB_MAP = {}
 
 # ===== TELEGRAM WEBHOOK =====
@@ -49,20 +49,24 @@ async def telegram_webhook(request: Request):
     path = f"/tmp/{file_id}.jpg"
     await file.download_to_drive(path)
 
-    # ===== GỬI API =====
+    # ===== GỬI API (FIX CHUẨN) =====
     try:
         with open(path, "rb") as f:
             res = requests.post(
                 "https://public-api.undresstool.fun/api/v1/photos/undress",
-                headers={"Authorization": f"Bearer {API_KEY}"},
+                headers={
+                    "X-API-KEY": API_KEY
+                },
                 files={"file": f},
                 data={
                     "webhook_url": f"{WEBHOOK_URL}/undress-photo-webhook"
                 }
             )
 
+        print("STATUS:", res.status_code)
+        print("API RESPONSE:", res.text)
+
         data_api = res.json()
-        print("API RESPONSE:", data_api)
 
     except Exception as e:
         print("API ERROR:", e)
@@ -93,7 +97,7 @@ async def result_webhook(
     chat_id = JOB_MAP.get(id_gen)
 
     if not chat_id:
-        print("Không tìm thấy chat_id")
+        print("Không tìm thấy chat_id (có thể Railway restart)")
         return {"error": "no chat_id"}
 
     path = f"/tmp/result_{id_gen}.png"
