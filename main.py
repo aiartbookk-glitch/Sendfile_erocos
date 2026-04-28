@@ -1,7 +1,7 @@
 import os
 import uuid
 import requests
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request
 from telegram import Update, Bot
 
 app = FastAPI()
@@ -13,7 +13,7 @@ WEBHOOK_URL = "https://librariannudebot-production.up.railway.app"
 
 bot = Bot(token=BOT_TOKEN)
 
-# lưu job tạm (nên thay bằng Redis/DB nếu production)
+# memory map (dev only)
 JOB_MAP = {}
 
 
@@ -30,7 +30,6 @@ async def telegram_webhook(request: Request):
 
     chat_id = update.message.chat_id
 
-    # ===== GET FILE ID =====
     file_id = None
 
     if update.message.photo:
@@ -41,32 +40,32 @@ async def telegram_webhook(request: Request):
         await bot.send_message(chat_id, "Gửi ảnh đi.")
         return {"ok": True}
 
-    await bot.send_message(chat_id, "Đang xử lý...")
+    await bot.send_message(chat_id, "Đang xử lý ảnh...")
 
     # ===== DOWNLOAD FILE =====
     tg_file = await bot.get_file(file_id)
-
     input_path = f"/tmp/{file_id}.jpg"
     await tg_file.download_to_drive(input_path)
 
-    # ===== CALL EXTERNAL API (PLACEHOLDER) =====
     job_id = str(uuid.uuid4())
 
+    # ===== CALL API =====
     try:
         with open(input_path, "rb") as f:
             res = requests.post(
-    "https://public-api.undresstool.fun/api/v1/photos/undress",  # <-- thay API của bạn
+                "https://public-api.undresstool.fun/api/v1/photos/undress",
                 headers={
                     "X-API-KEY": API_KEY
                 },
                 files={
-                    "file": f
+                    # 🔥 FIX QUAN TRỌNG: đúng format multipart
+                    "photo": ("image.jpg", f, "image/jpeg")
                 },
                 data={
-                    "job_id": job_id,
-                    "webhook": f"{WEBHOOK_URL}/result-webhook"
+                    # 🔥 API yêu cầu id_gen trong form-data
+                    "id_gen": job_id
                 },
-                timeout=60
+                timeout=120
             )
 
         print("API STATUS:", res.status_code)
@@ -74,14 +73,13 @@ async def telegram_webhook(request: Request):
 
     except Exception as e:
         print("API ERROR:", e)
-        await bot.send_message(chat_id, "Lỗi xử lý API")
+        await bot.send_message(chat_id, "Lỗi khi gọi API")
         return {"ok": True}
 
     if res.status_code != 200:
-        await bot.send_message(chat_id, f"API lỗi: {res.text}")
+        await bot.send_message(chat_id, f"API lỗi:\n{res.text}")
         return {"ok": True}
 
-    # save mapping
     JOB_MAP[job_id] = chat_id
     print("JOB_MAP:", JOB_MAP)
 
@@ -89,54 +87,48 @@ async def telegram_webhook(request: Request):
 
 
 # =========================
-# RESULT WEBHOOK (FIX 422)
+# RESULT WEBHOOK (FIX 422 SAFE)
 # =========================
 @app.post("/result-webhook")
 async def result_webhook(request: Request):
-    """
-    FIX 422:
-    Không ép schema Form/File nữa → đọc raw form an toàn
-    """
     form = await request.form()
 
-    print("=== CALLBACK RECEIVED ===")
+    print("=== CALLBACK ===")
     print("FORM KEYS:", list(form.keys()))
 
-    job_id = form.get("job_id")
-    status = form.get("status")
-
-    # file có thể tên khác nhau tùy API
-    file_obj = None
-    for k, v in form.items():
-        if hasattr(v, "file"):
-            file_obj = v
-            break
+    job_id = form.get("id_gen") or form.get("job_id") or form.get("id")
 
     if not job_id:
-        return {"error": "missing job_id"}
+        return {"error": "missing job id"}
 
     chat_id = JOB_MAP.get(job_id)
 
     if not chat_id:
-        print("Missing chat_id (maybe restart server)")
-        return {"error": "no chat_id"}
+        print("No chat_id found (maybe restart server)")
+        return {"error": "no chat"}
 
-    # ===== SAVE RESULT FILE =====
-    output_path = f"/tmp/result_{job_id}.bin"
+    # tìm file trả về
+    file_obj = None
+    for v in form.values():
+        if hasattr(v, "file"):
+            file_obj = v
+            break
+
+    output_path = f"/tmp/result_{job_id}.jpg"
 
     if file_obj:
         with open(output_path, "wb") as f:
             f.write(await file_obj.read())
 
-        await bot.send_photo(chat_id=chat_id, photo=open(output_path, "rb"))
+        await bot.send_photo(chat_id, open(output_path, "rb"))
     else:
-        await bot.send_message(chat_id, f"Done but no file. Status: {status}")
+        await bot.send_message(chat_id, "Done nhưng không có ảnh trả về")
 
     return {"ok": True}
 
 
 # =========================
-# SET WEBHOOK ON STARTUP
+# SET WEBHOOK
 # =========================
 @app.on_event("startup")
 async def startup():
