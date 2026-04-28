@@ -137,3 +137,11 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log("Server running on port", PORT);
 });
+app.get("/setwebhook", async (req, res) => {
+  try {
+    await bot.setWebHook(`${DOMAIN}/bot${BOT_TOKEN}`);
+    res.send("OK");
+  } catch (err) {
+    res.send(err.message);
+  }
+});
