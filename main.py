@@ -55,7 +55,7 @@ async def telegram_webhook(request: Request):
     try:
         with open(input_path, "rb") as f:
             res = requests.post(
-                "https://example-api.com/process",  # <-- thay API của bạn
+    "https://public-api.undresstool.fun/api/v1/photos/undress",  # <-- thay API của bạn
                 headers={
                     "X-API-KEY": API_KEY
                 },
