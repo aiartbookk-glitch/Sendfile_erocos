@@ -18,7 +18,7 @@ from telebot.types import (
     InputMediaDocument
 )
 
-TOKEN = "8701339366:AAGpIiuIxtEsGvzytzpSNs_uIVcB420vT6Y"
+TOKEN = "8822122504:AAGFX6eXhulx7PUjHsys27Vb3LcMLIe9WkE"
 bot = telebot.TeleBot(TOKEN)
 from telebot.types import BotCommand
 
