@@ -3,34 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Undress Tool</title>
+<title>Undress Tool - Batch</title>
 <style>
 * { box-sizing: border-box; }
-body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; background: #0f0f0f; color: #eee; }
+body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 20px; background: #0f0f0f; color: #eee; }
 h1 { text-align: center; margin-bottom: 8px; }
 .subtitle { text-align: center; color: #888; margin-bottom: 32px; }
 .card { background: #1a1a1a; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
 label { display: block; margin: 12px 0 4px; font-weight: 500; }
-input[type="file"], select, input[type="text"] { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: #eee; }
-button { width: 100%; padding: 14px; margin-top: 20px; background: #7c3aed; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+input[type="file"], select { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: #eee; }
+button { padding: 14px 24px; background: #7c3aed; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
 button:disabled { background: #444; cursor: not-allowed; }
+button.secondary { background: #333; margin-left: 8px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
 #status { margin-top: 16px; padding: 12px; border-radius: 8px; display: none; }
 #status.pending { background: #1e3a5f; display: block; }
 #status.done { background: #14532d; display: block; }
 #status.error { background: #7f1d1d; display: block; }
-#result img { max-width: 100%; border-radius: 8px; margin-top: 16px; }
-.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+.results { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; }
+.result-item { background: #111; border-radius: 8px; padding: 12px; }
+.result-item img { width: 100%; border-radius: 6px; }
+.result-item .name { font-size: 13px; color: #aaa; margin-bottom: 8px; word-break: break-all; }
+.result-item .status { font-size: 13px; margin: 6px 0; }
+.result-item a { color: #a78bfa; font-size: 13px; }
+.actions { margin-top: 16px; }
 </style>
 </head>
 <body>
 <h1>Undress Tool</h1>
-<p class="subtitle">Upload ảnh → Nhận kết quả</p>
+<p class="subtitle">Batch Upload & Download</p>
 
 <div class="card">
   <form id="form">
-    <label>Ảnh</label>
-    <input type="file" name="photo" accept="image/*" required>
+    <label>Ảnh (chọn nhiều file)</label>
+    <input type="file" name="photos" accept="image/*" multiple required>
 
     <div class="row">
       <div>
@@ -110,65 +117,150 @@ button:disabled { background: #444; cursor: not-allowed; }
       </div>
     </div>
 
-    <button type="submit" id="btn">Tạo ảnh</button>
+    <div class="actions">
+      <button type="submit" id="btn">Tạo batch</button>
+      <button type="button" class="secondary" id="downloadAll" disabled>Tải tất cả</button>
+    </div>
   </form>
 
   <div id="status"></div>
-  <div id="result"></div>
+  <div id="results" class="results"></div>
 </div>
 
 <script>
 const form = document.getElementById('form');
 const btn = document.getElementById('btn');
+const downloadAllBtn = document.getElementById('downloadAll');
 const statusEl = document.getElementById('status');
-const resultEl = document.getElementById('result');
+const resultsEl = document.getElementById('results');
+
+let tasks = [];
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  const files = form.photos.files;
+  if (!files.length) return;
+
   btn.disabled = true;
+  downloadAllBtn.disabled = true;
+  tasks = [];
+  resultsEl.innerHTML = '';
   statusEl.className = 'pending';
-  statusEl.textContent = 'Đang upload và xử lý...';
-  resultEl.innerHTML = '';
+  statusEl.textContent = `Đang upload ${files.length} ảnh...`;
 
-  const formData = new FormData(form);
+  const options = {
+    cloth: form.cloth.value,
+    age: form.age.value,
+    breast_size: form.breast_size.value,
+    body_type: form.body_type.value,
+    butt_size: form.butt_size.value,
+    post_gen: form.post_gen.value,
+  };
 
-  try {
-    const res = await fetch('/upload', { method: 'POST', body: formData });
-    const data = await res.json();
-
-    if (!data.id_gen) {
-      throw new Error(data.detail || 'Upload thất bại');
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const formData = new FormData();
+    formData.append('photo', file);
+    for (const [k, v] of Object.entries(options)) {
+      if (v) formData.append(k, v);
     }
 
-    statusEl.textContent = 'Đang chờ kết quả... (id: ' + data.id_gen.slice(0, 8) + ')';
-    pollResult(data.id_gen);
-  } catch (err) {
-    statusEl.className = 'error';
-    statusEl.textContent = 'Lỗi: ' + err.message;
-    btn.disabled = false;
+    try {
+      const res = await fetch('/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.id_gen) {
+        tasks.push({ id_gen: data.id_gen, filename: file.name, status: 'pending' });
+        renderTask(tasks[tasks.length - 1]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
   }
+
+  statusEl.textContent = `Đã upload ${tasks.length}/${files.length}. Đang chờ kết quả...`;
+  pollAll();
 });
 
-async function pollResult(id_gen) {
-  for (let i = 0; i < 60; i++) {
-    await new Promise(r => setTimeout(r, 2000));
-    try {
-      const res = await fetch('/result/' + id_gen);
-      const data = await res.json();
+function renderTask(task) {
+  const div = document.createElement('div');
+  div.className = 'result-item';
+  div.id = 'task-' + task.id_gen;
+  div.innerHTML = `
+    <div class="name">${task.filename}</div>
+    <div class="status">Đang xử lý...</div>
+  `;
+  resultsEl.appendChild(div);
+}
 
-      if (data.status === 'done' && data.image_url) {
-        statusEl.className = 'done';
-        statusEl.textContent = 'Xong!';
-        resultEl.innerHTML = '<img src="' + data.image_url + '" alt="Result"><br><a href="' + data.image_url + '" target="_blank" style="color:#a78bfa">Mở ảnh full</a>';
-        btn.disabled = false;
-        return;
-      }
-    } catch (e) {}
+async function pollAll() {
+  let doneCount = 0;
+  for (let round = 0; round < 90; round++) {
+    await new Promise(r => setTimeout(r, 2000));
+    doneCount = 0;
+
+    for (const task of tasks) {
+      if (task.status === 'done') { doneCount++; continue; }
+      try {
+        const res = await fetch('/result/' + task.id_gen);
+        const data = await res.json();
+        if (data.status === 'done' && data.image_url) {
+          task.status = 'done';
+          task.image_url = data.image_url;
+          updateTask(task);
+          doneCount++;
+        }
+      } catch (e) {}
+    }
+
+    statusEl.textContent = `Hoàn thành ${doneCount}/${tasks.length}`;
+    if (doneCount === tasks.length) {
+      statusEl.className = 'done';
+      downloadAllBtn.disabled = false;
+      btn.disabled = false;
+      return;
+    }
   }
   statusEl.className = 'error';
-  statusEl.textContent = 'Hết thời gian chờ. Thử lại sau.';
+  statusEl.textContent = `Hết thời gian. Hoàn thành ${doneCount}/${tasks.length}`;
   btn.disabled = false;
+  if (doneCount > 0) downloadAllBtn.disabled = false;
 }
+
+function updateTask(task) {
+  const div = document.getElementById('task-' + task.id_gen);
+  if (!div) return;
+  div.innerHTML = `
+    <div class="name">${task.filename}</div>
+    <img src="${task.image_url}" alt="result">
+    <div><a href="${task.image_url}" target="_blank">Mở ảnh</a></div>
+  `;
+}
+
+downloadAllBtn.addEventListener('click', async () => {
+  const done = tasks.filter(t => t.status === 'done' && t.image_url);
+  if (!done.length) return;
+
+  downloadAllBtn.disabled = true;
+  downloadAllBtn.textContent = 'Đang tải...';
+
+  for (const task of done) {
+    try {
+      const res = await fetch(task.image_url);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = task.filename.replace(/\.[^.]+$/, '') + '_result.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      await new Promise(r => setTimeout(r, 300));
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  downloadAllBtn.textContent = 'Tải tất cả';
+  downloadAllBtn.disabled = false;
+});
 </script>
 </body>
 </html>
