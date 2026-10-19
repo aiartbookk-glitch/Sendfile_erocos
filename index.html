@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Undress Tool</title>
+<style>
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; background: #0f0f0f; color: #eee; }
+h1 { text-align: center; margin-bottom: 8px; }
+.subtitle { text-align: center; color: #888; margin-bottom: 32px; }
+.card { background: #1a1a1a; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+label { display: block; margin: 12px 0 4px; font-weight: 500; }
+input[type="file"], select, input[type="text"] { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #111; color: #eee; }
+button { width: 100%; padding: 14px; margin-top: 20px; background: #7c3aed; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+button:disabled { background: #444; cursor: not-allowed; }
+#status { margin-top: 16px; padding: 12px; border-radius: 8px; display: none; }
+#status.pending { background: #1e3a5f; display: block; }
+#status.done { background: #14532d; display: block; }
+#status.error { background: #7f1d1d; display: block; }
+#result img { max-width: 100%; border-radius: 8px; margin-top: 16px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Undress Tool</h1>
+<p class="subtitle">Upload ảnh → Nhận kết quả</p>
+
+<div class="card">
+  <form id="form">
+    <label>Ảnh</label>
+    <input type="file" name="photo" accept="image/*" required>
+
+    <div class="row">
+      <div>
+        <label>Cloth</label>
+        <select name="cloth">
+          <option value="">Mặc định</option>
+          <option value="Naked">Naked</option>
+          <option value="Bikini">Bikini</option>
+          <option value="Lingerie">Lingerie</option>
+          <option value="Sport wear">Sport wear</option>
+          <option value="BDSM">BDSM</option>
+          <option value="Latex">Latex</option>
+          <option value="Schoolgirl">Schoolgirl</option>
+          <option value="Maid">Maid</option>
+          <option value="Teacher">Teacher</option>
+          <option value="Police">Police</option>
+          <option value="Secretary">Secretary</option>
+          <option value="Cheerleader">Cheerleader</option>
+          <option value="Witch">Witch</option>
+          <option value="Sexy Witch">Sexy Witch</option>
+          <option value="Christmas underwear">Christmas underwear</option>
+          <option value="Pregnant">Pregnant</option>
+        </select>
+      </div>
+      <div>
+        <label>Age</label>
+        <select name="age">
+          <option value="">Mặc định</option>
+          <option value="18">18</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="50">50</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Breast Size</label>
+        <select name="breast_size">
+          <option value="">Mặc định</option>
+          <option value="small">Small</option>
+          <option value="normal">Normal</option>
+          <option value="big">Big</option>
+        </select>
+      </div>
+      <div>
+        <label>Body Type</label>
+        <select name="body_type">
+          <option value="">Mặc định</option>
+          <option value="skinny">Skinny</option>
+          <option value="normal">Normal</option>
+          <option value="curvy">Curvy</option>
+          <option value="muscular">Muscular</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Butt Size</label>
+        <select name="butt_size">
+          <option value="">Mặc định</option>
+          <option value="small">Small</option>
+          <option value="normal">Normal</option>
+          <option value="big">Big</option>
+        </select>
+      </div>
+      <div>
+        <label>Post Gen</label>
+        <select name="post_gen">
+          <option value="">Mặc định</option>
+          <option value="upscale">Upscale</option>
+          <option value="anime">Anime</option>
+        </select>
+      </div>
+    </div>
+
+    <button type="submit" id="btn">Tạo ảnh</button>
+  </form>
+
+  <div id="status"></div>
+  <div id="result"></div>
+</div>
+
+<script>
+const form = document.getElementById('form');
+const btn = document.getElementById('btn');
+const statusEl = document.getElementById('status');
+const resultEl = document.getElementById('result');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  statusEl.className = 'pending';
+  statusEl.textContent = 'Đang upload và xử lý...';
+  resultEl.innerHTML = '';
+
+  const formData = new FormData(form);
+
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (!data.id_gen) {
+      throw new Error(data.detail || 'Upload thất bại');
+    }
+
+    statusEl.textContent = 'Đang chờ kết quả... (id: ' + data.id_gen.slice(0, 8) + ')';
+    pollResult(data.id_gen);
+  } catch (err) {
+    statusEl.className = 'error';
+    statusEl.textContent = 'Lỗi: ' + err.message;
+    btn.disabled = false;
+  }
+});
+
+async function pollResult(id_gen) {
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const res = await fetch('/result/' + id_gen);
+      const data = await res.json();
+
+      if (data.status === 'done' && data.image_url) {
+        statusEl.className = 'done';
+        statusEl.textContent = 'Xong!';
+        resultEl.innerHTML = '<img src="' + data.image_url + '" alt="Result"><br><a href="' + data.image_url + '" target="_blank" style="color:#a78bfa">Mở ảnh full</a>';
+        btn.disabled = false;
+        return;
+      }
+    } catch (e) {}
+  }
+  statusEl.className = 'error';
+  statusEl.textContent = 'Hết thời gian chờ. Thử lại sau.';
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>

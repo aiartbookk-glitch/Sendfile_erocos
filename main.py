@@ -6,7 +6,8 @@ from typing import Optional
 from datetime import datetime
 
 from fastapi import FastAPI, File, UploadFile, Form, Request, HTTPException, Header
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import httpx
 import aiofiles
 
@@ -80,18 +81,13 @@ async def call_undress_api(
 
 
 # ============== ENDPOINTS ==============
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    return {
-        "status": "running",
-        "endpoints": {
-            "upload": "POST /upload",
-            "webhook": "POST /webhook",
-            "result": "GET /result/{id_gen}",
-            "me": "GET /me",
-            "list": "GET /list",
-        },
-    }
+    html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h1>Undress Tool</h1><p>index.html not found</p>"
 
 
 @app.get("/me")
