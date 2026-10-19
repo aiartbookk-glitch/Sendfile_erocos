@@ -1,53 +1,56 @@
-# Undress Telegram Bot (Credit + Referral)
+# Undress Webhook Server (Railway + GitHub)
 
-Bot Telegram tích hợp Undress API, hệ thống credit và referral.
+Server nhận webhook từ Undress API và cung cấp endpoint upload ảnh đơn giản.
 
 ## Tính năng
 
-- Credit system
-- Referral (kiếm credit khi giới thiệu)
-- Gửi ảnh → nhận kết quả undress
-- Admin nạp credit (`/addcredit`)
-- Tích hợp webhook server Railway đã có
+- Endpoint `/webhook` nhận kết quả từ Undress API
+- Endpoint `/upload` nhận ảnh từ local và tự động gọi Undress API
+- Endpoint `/result/{id_gen}` kiểm tra kết quả
+- Lưu kết quả tạm thời trong memory (restart sẽ mất)
 
-## Cài đặt
+## Deploy lên Railway
 
-1. Copy `.env.example` thành `.env` và điền:
-   - `BOT_TOKEN` (từ @BotFather)
-   - `UNDRESS_API_KEY`
-   - `WEBHOOK_SERVER` (URL Railway của bạn)
-   - `ADMIN_IDS` (telegram_id của admin, cách nhau bởi dấu phẩy)
+1. Push repo này lên GitHub
+2. Vào [Railway](https://railway.app) → New Project → Deploy from GitHub repo
+3. Thêm biến môi trường:
+   - `UNDRESS_API_KEY`: API key của bạn
+   - `WEBHOOK_SECRET` (tuỳ chọn): secret để bảo vệ webhook
+4. Railway sẽ cho URL public, ví dụ: `https://xxx.up.railway.app`
 
-2. Cài dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Sử dụng
 
-3. Chạy:
-   ```bash
-   python bot.py
-   ```
+### Upload ảnh từ máy local
 
-## Deploy
+```bash
+curl -X POST "https://YOUR-RAILWAY-URL/upload" \
+  -F "photo=@/path/to/photo.jpg" \
+  -F "cloth=Naked" \
+  -F "age=20"
+```
 
-Có thể chạy trên Railway, VPS, hoặc máy local (polling).
+Trả về `id_gen`. Sau đó kiểm tra kết quả:
 
-## Lệnh
+```bash
+curl "https://YOUR-RAILWAY-URL/result/YOUR_ID_GEN"
+```
 
-| Lệnh | Mô tả |
-|------|------|
-| `/start` | Đăng ký / xem credit |
-| `/balance` | Xem số credit |
-| `/ref` | Lấy link giới thiệu |
-| `/addcredit <id> <số>` | Admin cộng credit |
+### Kiểm tra balance
 
-## Cơ chế Ref
+```bash
+curl "https://YOUR-RAILWAY-URL/me"
+```
 
-- Người mới join qua link ref nhận **+3 credit** bonus
-- Khi người mới tạo ảnh thành công lần đầu → người giới thiệu nhận **+2 credit**
-- Mỗi người chỉ được thưởng 1 lần
+## Biến môi trường
 
-## Chi phí
+| Biến | Bắt buộc | Mô tả |
+|------|----------|-------|
+| `UNDRESS_API_KEY` | Có | API key Undress |
+| `WEBHOOK_SECRET` | Không | Secret header bảo vệ webhook |
+| `PORT` | Không | Railway tự set |
 
-- Ảnh thường: 2 credit
-- Có tùy chỉnh (cloth, age...): 3 credit (có thể mở rộng trong code)
+## Lưu ý
+
+- Chỉ sử dụng với ảnh người lớn (≥18) và có sự đồng ý rõ ràng.
+- Kết quả lưu trong memory, restart app sẽ mất. Nên nâng cấp lên Redis/S3 nếu dùng lâu dài.
+- Rate limit Undress API: 60 request/phút khi có key.

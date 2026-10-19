@@ -1,4 +1,6 @@
-aiogram>=3.4
-aiosqlite
+fastapi
+uvicorn[standard]
 httpx
+python-multipart
+aiofiles
 python-dotenv
