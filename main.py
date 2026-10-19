@@ -163,31 +163,40 @@ async def upload_photo(
 
 
 @app.post("/webhook")
-async def webhook(
-    request: Request,
-    x_webhook_secret: Optional[str] = Header(None),
-):
-    """Nhận kết quả từ Undress API."""
-    if WEBHOOK_SECRET and x_webhook_secret != WEBHOOK_SECRET:
-        raise HTTPException(status_code=403, detail="Invalid secret")
-
+async def webhook(request: Request):
+    """Nhận kết quả từ Undress API (multipart/form-data)."""
     try:
-        data = await request.json()
-    except Exception:
-        data = {"raw": (await request.body()).decode("utf-8", errors="ignore")}
+        form = await request.form()
+        data = {key: form[key] for key in form.keys()}
+        
+        # Nếu có file ảnh thì lấy URL hoặc bytes
+        if "image" in form and hasattr(form["image"], "file"):
+            # Có thể là file upload
+            pass
+        
+        id_gen = data.get("id_gen")
+        image_url = data.get("image_url") or data.get("result") or data.get("url")
+        
+        logger.info(f"Webhook received: id_gen={id_gen}, image_url={image_url}")
+        logger.info(f"Full form data: {data}")
 
-    id_gen = data.get("id_gen")
-    logger.info(f"Webhook received: id_gen={id_gen}, data={json.dumps(data)[:500]}")
+        if id_gen:
+            results[id_gen] = {
+                "received_at": datetime.utcnow().isoformat(),
+                "id_gen": id_gen,
+                "image_url": image_url,
+                "payload": data,
+            }
+            if id_gen in pending:
+                pending[id_gen]["status"] = "done"
 
-    if id_gen:
-        results[id_gen] = {
-            "received_at": datetime.utcnow().isoformat(),
-            "payload": data,
-        }
-        if id_gen in pending:
-            pending[id_gen]["status"] = "done"
-
-    return {"ok": True}
+        return {"ok": True, "id_gen": id_gen}
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        # Fallback: thử đọc raw body
+        body = await request.body()
+        logger.info(f"Raw body: {body[:1000]}")
+        return {"ok": False, "error": str(e)}
 
 
 @app.get("/result/{id_gen}")
